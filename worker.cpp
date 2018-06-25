@@ -2,21 +2,11 @@
 
 Worker::Worker(const uint &rows, const uint &cols,
                const QRgb &one, const QRgb &two, const QRgb &three, const QRgb &four,
-               QObject *parent) : QObject(parent)
+               QObject *parent) : QObject(parent), color1(one) , color2(two), color3(three), color4(four)
 {
     this->rows = rows;
     this->cols = cols;
 
-    color1 = one;
-    color2 = two;
-    color3 = three;
-    color4 = four;
-}
-
-void Worker::initWorker()
-{
-    colors.clear();
-    m_GrainPiles.clear();
     m_GrainCount = 0;
 
     colors.append(&color1);
@@ -24,38 +14,43 @@ void Worker::initWorker()
     colors.append(&color3);
     colors.append(&color4);
 
-    p_Data.resize(cols*rows*4);
-    m_Data.resize(cols*rows*4);
-    m_Data.fill(0);
-    p_Data.fill(0);
+    arraySize = cols*rows;
 
     colStart = cols/2;
     rowStart = rows/2;
 
-    for(uint i(0); i < cols; i++){
-        QVector<uint> v;
-        for(uint j(0); j < rows; j++){
-            v.append(0);
-        }
-        m_GrainPiles.append(v);
+    m_Grains = new uchar[arraySize];
+    m_GrainsCopy = new uchar[arraySize];
+
+    for(uint i(0); i < rows*cols; i++){
+        m_Grains[i] = 0;
+        m_GrainsCopy[i] = 0;
     }
-    startWorker();
+}
+
+Worker::~Worker()
+{
+    delete [] m_Grains;
+    delete [] m_GrainsCopy;
 }
 
 void Worker::startWorker()
 {
-    uint x(colStart), y(rowStart);
     tElapsed.start();
+
     while(!atBorder){
         m_GrainCount++;
 
-        addGrainAt(x, y);
+        addGrainAt(colStart, rowStart);
 
         //To prevent unwanted interim states in the ui
-        memcpy(p_Data.data(),m_Data.data(),p_Data.length());
+        if(m_Mutex.tryLock(0)){
+            memcpy(m_GrainsCopy, m_Grains, arraySize);
+            m_Mutex.unlock();
+        }
 
-        /*Uncomment for chartview visualisation
-        if(m_GrainCount % 1000 == 0){
+        //Uncomment for chartview visualisation
+        /*if(m_GrainCount % 1000 == 0){
             vTimes << tElapsed.elapsed();
             vGrains << m_GrainCount;
         }*/
@@ -66,31 +61,30 @@ void Worker::startWorker()
 void Worker::addGrainAt(uint &x,  uint &y)
 {
     if(x < cols && y < rows){
-        m_GrainPiles[x][y] ++;
-        if(m_GrainPiles.at(x).at(y) > 3){
-            //pile topples
-            m_GrainPiles[x][y] = 0;
+        index1D = cols * y + x;
+        m_Grains[index1D]++;
 
-            //direkt x & y manipulation, to prevent stack overflow
-            addGrainAt(x,   --y);
+        if(m_Grains[index1D] > 3){
+            //pile topples
+            m_Grains[index1D] = 0;
+
+            addGrainAt(x, --y);
             addGrainAt(++x, ++y);
             addGrainAt(--x, ++y);
             addGrainAt(--x, --y);
-            ++x;
+            x++;
         }
-
-        index1D = (cols *y + x)*4;
-        memcpy(m_Data.data()+index1D,
-               colors.at(m_GrainPiles.at(x).at(y)),
-               4);
     }else
         atBorder = true;
 }
 
-const QByteArray &Worker::getData()
+void Worker::getData(uchar *image)
 {
-    //Readonly access & potential artefacts for the Image are rare and irrelevant -> no Mutex to increase performance
-    return p_Data;
+    m_Mutex.lock();
+    for(uint i(0); i < arraySize; i++ ){
+        memcpy(image + (i*4), colors.at(m_GrainsCopy[i]), 4);
+    }
+    m_Mutex.unlock();
 }
 
 const quint64 &Worker::getCount()

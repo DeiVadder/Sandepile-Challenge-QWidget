@@ -5,6 +5,8 @@
 #include <QVector>
 #include <QColor>
 
+#include <QMutex>
+
 //---------
 #include <QElapsedTimer>
 
@@ -18,12 +20,12 @@ public:
                     const QRgb &three = QRgb(0x004747D1),
                     const QRgb &four = QRgb(0x00E68A00),
                     QObject *parent = nullptr);
+    ~Worker();
 
-    const QByteArray &getData();
+    void getData(uchar *image);
     const quint64 &getCount();
 
 public slots:
-    void initWorker();
     void startWorker();
 
 private slots:
@@ -33,8 +35,9 @@ signals:
     void workDone(QVector<quint64> times, QVector<quint64> grains);
 
 private:
-    QByteArray m_Data, p_Data;
-    QVector<QVector<uint> > m_GrainPiles;
+    uchar *m_Grains, *m_GrainsCopy;
+
+    QMutex m_Mutex;
 
     QRgb color1;
     QRgb color2;
@@ -43,7 +46,7 @@ private:
 
     QVector<QRgb*> colors;
 
-    uint colStart, rowStart, cols, rows, index1D;
+    uint colStart, rowStart, cols, rows, index1D, arraySize;
 
     quint64 m_GrainCount = 0;
     bool atBorder = false;
