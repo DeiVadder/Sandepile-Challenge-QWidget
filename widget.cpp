@@ -9,8 +9,6 @@
 const int cols(500);
 const int rows(500);
 
-
-//Alfa interpretation differences for the OS -> USE Color
 const QRgb color1 = QColor(0x00,0x00,0x00).rgb();
 const QRgb color2 = QColor(0xA6,0xA6,0xFF).rgb();
 const QRgb color3 = QColor(0x47,0x47,0xD1).rgb();
