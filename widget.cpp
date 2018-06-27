@@ -14,7 +14,6 @@ const QRgb color2 = QColor(0xA6,0xA6,0xFF).rgb();
 const QRgb color3 = QColor(0x47,0x47,0xD1).rgb();
 const QRgb color4 = QColor(0xE6,0x8A,0x00).rgb();
 
-
 #include <QChartView>
 #include <QtCharts>
 #include <QLineSeries>
@@ -28,8 +27,11 @@ Widget::Widget(QWidget *parent)
     m_Image.fill(color1);
 
     QThread *thread = new QThread();
-    worker = new Worker(cols,rows, color1, color2, color3, color4);
+    worker = new Worker(cols,rows);
     worker->moveToThread(thread);
+
+    connect(worker, &Worker::newGrainData, this, &Widget::newGrainData);
+
     connect(thread, &QThread::started, worker, &Worker::startWorker);
     connect(thread, &QThread::finished, worker, &Worker::deleteLater);
     connect(thread, &QThread::finished, thread, &QThread::deleteLater);
@@ -37,7 +39,7 @@ Widget::Widget(QWidget *parent)
     connect(qApp, &QCoreApplication::aboutToQuit, thread, &QThread::quit);
 
 
-    connect(&m_tUpdate, &QTimer::timeout, this, &Widget::updateImage);
+    connect(&m_tUpdate, &QTimer::timeout, this, QOverload<>::of(&Widget::update));
 
     colors.append(&color1);
     colors.append(&color2);
@@ -51,7 +53,7 @@ Widget::Widget(QWidget *parent)
     thread->start(QThread::HighestPriority);
 
     //Update ui every 50ms -> 20Hz refreshrate
-    m_tUpdate.start(50);
+    m_tUpdate.start(0);
 
 //Uncomment for chartview visualisation
 /*    connect(worker, &Worker::workDone, this, [=](QVector<quint64> times, QVector<quint64> grains){
@@ -86,12 +88,10 @@ Widget::Widget(QWidget *parent)
     */
 }
 
-
-void Widget::updateImage()
+void Widget::newGrainData(QVector<QVector<quint8>> distribution, quint64 count)
 {
-    worker->getData(m_Image.bits());
-    sGrains = QString::number(worker->getCount());
-    update();
+    lastDistribution = distribution;
+    lastCount = count;
 }
 
 void Widget::paintEvent(QPaintEvent *event)
@@ -102,21 +102,29 @@ void Widget::paintEvent(QPaintEvent *event)
     //Background
     p.fillRect(rect(),*colors.at(0));
 
+    //Update Image attune to the data from the Worker
+    if(lastCount != currentGrains){
+        for(uint x(0); x < cols; x++ ){
+            for(uint y(0); y < rows; y++){
+                memcpy(m_Image.bits() + ((cols * y + x)*4), colors.at(lastDistribution.at(x).at(y)), 4);
+            }
+        }
+        currentGrains = lastCount;
+    }
 
-    //Adjust Sandpileimage without changing the aspect ratio
+    //Adjust & draw sandpile image without changing the aspect ratio
     int min = width() > height() ? height() : width();
     QRect rect((width()-min)/2, (height()-min)/2, min,min);
     p.drawImage(rect,m_Image, m_Image.rect());
 
     //Draw legend
     p.setPen(QColor("White"));
-    p.drawText(5,height()-18,"Grains fallen: " + sGrains);
+    p.drawText(5,height()-18,"Grains fallen: " + QString::number(currentGrains));
 
     int offsetY = 3;
     for(int i(0); i < colors.size(); i++){
-        p.drawRect(5,i * (offsetY +18) + offsetY,18,18);
-        p.fillRect(6,1 + i * (offsetY +18) +offsetY,16,16, *colors.at(i));
-        p.setPen(QColor("White"));
+        p.drawRect(5,   i * (offsetY +18) + offsetY,    18,18);
+        p.fillRect(6,   1 + i * (offsetY +18) +offsetY, 16,16, *colors.at(i));
         p.drawText(26, 15 + i *(18+offsetY)+offsetY, QString::number(i) + " Grains");
     }
 }

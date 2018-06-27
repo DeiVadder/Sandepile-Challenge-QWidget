@@ -15,7 +15,7 @@ public:
     Widget(QWidget *parent = 0);
 
 private slots:
-    void updateImage();
+    void newGrainData(QVector<QVector<quint8>> distribution, quint64 count);
 
 protected:
     virtual void paintEvent(QPaintEvent *event) override;
@@ -24,10 +24,13 @@ private:
     QTimer m_tUpdate;
 
     QImage m_Image;
-    QString sGrains;
 
     Worker *worker;
     QVector<const QRgb*> colors;
+
+    QVector<QVector<uint8_t> > lastDistribution;
+    quint64 lastCount = 0;
+    quint64 currentGrains = 0;
 };
 
 #endif // WIDGET_H
